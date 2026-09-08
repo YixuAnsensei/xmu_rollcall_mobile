@@ -1,0 +1,14 @@
+=== 修复记录 ===
+问题: PlatformConstants 找不到（原生模块未链接）
+原因: react-native-webview 和 @react-native-async-storage/async-storage 是原生模块，Expo Go 不支持
+解决: 移除这两个原生模块，改用 expo-web-browser（系统浏览器登录）
+
+=== 当前状态 ===
+TypeScript: 零错误
+Expo 服务器: 运行中 http://192.168.10.49:8082
+QR 码: 已更新
+
+=== 连接步骤 ===
+1. 重新扫码上方二维码
+2. 或手动输入: 192.168.10.49:8082
+3. App 会自动刷新加载新版本
