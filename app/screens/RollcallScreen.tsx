@@ -21,6 +21,7 @@ import {
   radarTriangulate,
   isRadarType,
   fmtTime,
+  getProfile,
 } from '../../lib/api';
 
 // ---------------------------------------------------------------------------
@@ -62,12 +63,13 @@ export default function RollcallScreen() {
     setResult({ type: 'loading' });
     try {
       const { cookie, studentId } = await getAuth();
-      if (!cookie || !studentId) {
+      if (!cookie) {
         router.replace('/screens/LoginScreen');
         return;
       }
+      const resolvedStudentId = studentId || (await getProfile(cookie)).id;
       const sem = await getSemesterInfo(cookie);
-      const latest = await getLatestRollcall(parseInt(courseId, 10), cookie, studentId);
+      const latest = await getLatestRollcall(parseInt(courseId, 10), cookie, resolvedStudentId);
 
       if (!latest) {
         setResult({ type: 'none' });

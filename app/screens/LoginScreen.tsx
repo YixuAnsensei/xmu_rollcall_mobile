@@ -6,24 +6,27 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   SafeAreaView,
-  Linking,
+  TextInput,
+  Alert,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
 import { setAuth } from '../../lib/auth';
+import { getProfile } from '../../lib/api';
 
 const BASE_URL = 'https://lnt.xmu.edu.cn';
-const CAS_URL = 'https://ids.xmu.edu.cn';
 
 export default function LoginScreen() {
   const router = useRouter();
   const [status, setStatus] = useState('点击按钮开始登录');
+  const [cookieInput, setCookieInput] = useState('');
+  const [validating, setValidating] = useState(false);
 
-  const handleLogin = async () => {
+  const handleOpenLogin = async () => {
     try {
       setStatus('正在打开浏览器...');
       const result = await WebBrowser.openAuthSessionAsync(
-        `${BASE_URL}/auth/cas/login?redirect=${encodeURIComponent(BASE_URL)}`,
+        BASE_URL,
         BASE_URL,
         {
           showInRecents: true,
@@ -32,55 +35,37 @@ export default function LoginScreen() {
       );
 
       if (result.type === 'success') {
-        const url = new URL(result.url);
-        const cookie = document?.cookie || '';
-
-        // Try to extract from URL params first
-        const studentMatch = url.searchParams.get('student_id') || url.searchParams.get('id');
-
-        if (studentMatch) {
-          const studentId = parseInt(studentMatch, 10);
-          if (!isNaN(studentId)) {
-            setAuth(`session=${studentMatch}`, studentId);
-            setStatus('✅ 登录成功！');
-            setTimeout(() => router.replace('/screens/HomeScreen'), 500);
-            return;
-          }
-        }
+        setStatus('✅ 已在浏览器中打开，请登录后回到此页面');
+      } else {
+        setStatus('浏览器已关闭');
       }
-
-      // Fallback: direct login via CAS
-      await WebBrowser.openAuthSessionAsync(
-        CAS_URL,
-        CAS_URL,
-        {
-          showInRecents: true,
-          preferEphemeralSession: false,
-        }
-      );
-
-      setStatus('请完成登录后回到此页面');
-
     } catch (e) {
-      setStatus('❌ 登录失败，请重试');
+      setStatus('❌ 打开失败，请重试');
     }
   };
 
-  // Try to extract student ID from the redirected URL
-  const handleURL = async (event: { url: string }) => {
-    const url = event.url;
-    if (url.includes('lnt.xmu.edu.cn') && !url.includes('ids.xmu.edu.cn')) {
-      try {
-        const match = url.match(/\/student\/(\d+)\//);
-        if (match) {
-          const studentId = parseInt(match[1], 10);
-          if (!isNaN(studentId)) {
-            setAuth('mobile-session', studentId);
-            setStatus('✅ 登录成功！');
-            setTimeout(() => router.replace('/screens/HomeScreen'), 500);
-          }
-        }
-      } catch {}
+  const handleValidateCookie = async () => {
+    const cookie = cookieInput.trim();
+    if (!cookie) {
+      Alert.alert('提示', '请先粘贴 Cookie');
+      return;
+    }
+
+    setValidating(true);
+    setStatus('正在验证 Cookie...');
+
+    try {
+      const profile = await getProfile(cookie);
+      setAuth(cookie, profile.id, profile.name);
+      setStatus('✅ 登录成功！欢迎，' + profile.name);
+      Alert.alert('登录成功', '欢迎，' + profile.name + '！', [
+        { text: '好的', onPress: () => router.replace('/screens/HomeScreen') },
+      ]);
+    } catch (e) {
+      setStatus('❌ Cookie 无效，请检查后重试');
+      Alert.alert('登录失败', 'Cookie 已过期或无效，请重新获取');
+    } finally {
+      setValidating(false);
     }
   };
 
@@ -93,25 +78,53 @@ export default function LoginScreen() {
 
       <View style={styles.content}>
         <Text style={styles.icon}>🔐</Text>
-        <Text style={styles.description}>
-          将跳转到厦大 CAS 统一认证系统
-        </Text>
-        <Text style={styles.hint}>
-          请使用学号和密码登录，登录后将自动提取凭证
-        </Text>
 
         <TouchableOpacity
           style={styles.loginBtn}
-          onPress={handleLogin}
+          onPress={handleOpenLogin}
           activeOpacity={0.8}
         >
-          <Text style={styles.loginBtnText}>🐾 前往登录</Text>
+          <Text style={styles.loginBtnText}>🐾 打开登录页面</Text>
+        </TouchableOpacity>
+
+        <View style={styles.divider}>
+          <Text style={styles.dividerText}>或手动粘贴 Cookie</Text>
+        </View>
+
+        <Text style={styles.hint}>
+          在已登录的浏览器中按 F12 → 应用 → Cookie → 复制 lnt.xmu.edu.cn 的 cookie 值
+        </Text>
+
+        <TextInput
+          style={styles.cookieInput}
+          placeholder="粘贴 Cookie..."
+          placeholderTextColor="#A7A9BE"
+          value={cookieInput}
+          onChangeText={setCookieInput}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        <TouchableOpacity
+          style={[styles.validateBtn, validating && styles.validateBtnDisabled]}
+          onPress={handleValidateCookie}
+          disabled={validating}
+          activeOpacity={0.8}
+        >
+          {validating ? (
+            <ActivityIndicator size="small" color="#0F0E17" />
+          ) : (
+            <Text style={styles.validateBtnText}>✅ 验证并登录</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.statusWrap}>
           <ActivityIndicator
             size="small"
-            color={status.includes('✅') ? '#06D6A0' : '#FF6B9D'}
+            color={status.includes('✅') ? '#06D6A0' : status.includes('❌') ? '#EF476F' : '#FF6B9D'}
           />
           <Text style={styles.status}>{status}</Text>
         </View>
@@ -151,20 +164,6 @@ const styles = StyleSheet.create({
     fontSize: 64,
     marginBottom: 24,
   },
-  description: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFE',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  hint: {
-    fontSize: 14,
-    color: '#A7A9BE',
-    textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 22,
-  },
   loginBtn: {
     backgroundColor: '#FF6B9D',
     borderRadius: 14,
@@ -172,17 +171,67 @@ const styles = StyleSheet.create({
     paddingHorizontal: 48,
     minWidth: 220,
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   loginBtnText: {
     color: '#0F0E17',
     fontSize: 16,
     fontWeight: 'bold',
   },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+    width: '100%',
+  },
+  dividerText: {
+    color: '#A7A9BE',
+    fontSize: 13,
+  },
+  hint: {
+    fontSize: 12,
+    color: '#A7A9BE',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 20,
+    opacity: 0.8,
+  },
+  cookieInput: {
+    backgroundColor: '#1A1828',
+    borderRadius: 12,
+    padding: 14,
+    width: '100%',
+    minHeight: 100,
+    color: '#FFFFFE',
+    fontSize: 12,
+    fontFamily: 'monospace',
+    borderWidth: 1,
+    borderColor: '#221F33',
+    marginBottom: 20,
+    textAlignVertical: 'top',
+  },
+  validateBtn: {
+    backgroundColor: '#06D6A0',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    minWidth: 200,
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  validateBtnDisabled: {
+    opacity: 0.6,
+  },
+  validateBtnText: {
+    color: '#0F0E17',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
   statusWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
+    marginBottom: 24,
   },
   status: {
     marginLeft: 8,

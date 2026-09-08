@@ -13,9 +13,10 @@ import { isLoggedIn, getAuth } from '../../lib/auth';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [authState, setAuthState] = useState<{ cookie: string | null; studentId: number | null }>({
+  const [authState, setAuthState] = useState<{ cookie: string | null; studentId: number | null; userName: string }>({
     cookie: null,
     studentId: null,
+    userName: '',
   });
   const [loading, setLoading] = useState(true);
 
@@ -66,8 +67,8 @@ export default function HomeScreen() {
 
         {loggedIn && (
           <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>当前学号</Text>
-            <Text style={styles.infoValue}>{authState.studentId}</Text>
+            <Text style={styles.infoLabel}>当前用户</Text>
+            <Text style={styles.infoValue}>{authState.userName || authState.studentId || '未登录'}</Text>
             <Text style={styles.infoHint}>每次打开需重新登录，Cookie 仅在会话期间有效</Text>
           </View>
         )}

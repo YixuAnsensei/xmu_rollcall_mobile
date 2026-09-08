@@ -87,6 +87,31 @@ function uuid(): string {
 // Auth flows
 // ---------------------------------------------------------------------------
 
+export async function getProfile(cookie: string): Promise<{ id: number; name: string }> {
+  try {
+    const resp = await fetch(`${BASE_URL}/api/profile`, {
+      headers: makeHeaders(cookie),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const id =
+        data.id ??
+        data.user_id ??
+        data.userId ??
+        data.student_id ??
+        data.studentId ??
+        null;
+      if (typeof id === 'number' || (typeof id === 'string' && !isNaN(Number(id)))) {
+        return {
+          id: Number(id),
+          name: data.name ?? data.username ?? '',
+        };
+      }
+    }
+  } catch {}
+  throw new Error('无法获取用户信息');
+}
+
 export async function getSemesterInfo(cookie: string): Promise<SemesterInfo> {
   try {
     const resp = await fetch(`${BASE_URL}/api/current-semester-info`, {
