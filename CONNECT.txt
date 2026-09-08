@@ -6,8 +6,16 @@ exp://192.168.10.49:8082/--/app
 电脑 IP: 192.168.10.49
 端口: 8082
 
-新版本已更新（登录流程修改）:
-- 扫码测试最新 QR 码: qr_v2.png
+最新版本 (v1.0.1):
+- 登录改为手动粘贴 Cookie（修复了自动提取 cookie 的失效问题）
+- 新增 /api/profile 接口获取用户信息
+- 显示用户名而非学号
+- QR 码: qr_v3.png
+
+EAS APK 构建中:
+- Build ID: afffc6c8-2109-4a74-a397-245174fba8e7
+- 状态: in queue
+- 日志: https://expo.dev/accounts/yixuansensei/projects/zako-rollcall-mobile/builds/afffc6c8-2109-4a74-a397-245174fba8e7
 
 使用方法:
 1. 手机和电脑连同一个 WiFi
