@@ -5,6 +5,7 @@ import {
   fetchRollcallOutcome,
   submitNumberCode,
   sendRadar,
+  fmtTime,
 } from '../api';
 
 const EARTH_R = 6371000.0;
@@ -22,6 +23,8 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
 
 interface Scenario {
   semesterAlive: boolean;
+  gatewayDown: boolean;
+  rejectAnswerPut: boolean;
   semester: { sem: string; year: string };
   courses: any[];
   rollcallsByCourse: Record<number, any[]>;
@@ -38,6 +41,8 @@ const courseRequests: { body: any; cookie: string | null }[] = [];
 function freshScenario(): Scenario {
   return {
     semesterAlive: true,
+    gatewayDown: false,
+    rejectAnswerPut: false,
     semester: { sem: '31', year: '13' },
     courses: [],
     rollcallsByCourse: {},
@@ -59,6 +64,9 @@ beforeAll(() => {
       const url = new URL(req.url);
       const p = url.pathname;
       const cookie = req.headers.get('cookie');
+      if (sc.gatewayDown) {
+        return new Response('bad gateway', { status: 502 });
+      }
       if (p === '/api/profile') {
         return Response.json({ id: 2025001, name: '测试同学' });
       }
@@ -98,6 +106,10 @@ beforeAll(() => {
       m = p.match(/^\/api\/rollcall\/(\d+)\/answer$/);
       if (m && req.method === 'PUT') {
         const body = await req.json();
+        if (sc.rejectAnswerPut) {
+          probes.push({ rid: m[1], payload: body, hit: false });
+          return Response.json({ message: 'forbidden' }, { status: 403 });
+        }
         const t = sc.radarTeacher[m[1]];
         if (!t) return Response.json({ message: 'no such radar' }, { status: 404 });
         const dist = haversineM(body.latitude, body.longitude, t.lat, t.lng);
@@ -296,5 +308,62 @@ describe('e2e: radar sign-in scenarios', () => {
     const res = await sendRadar('ck', '206', () => {});
     expect(res.success).toBe(false);
     expect(res.campus).toBe('思明校区');
+  });
+
+  test('teacher probe rejected with 403 -> radar fails, no crash', async () => {
+    sc = freshScenario();
+    sc.rejectAnswerPut = true;
+    sc.radarTeacher['208'] = { lat: 24.441, lng: 118.095, radius: 50 };
+    const res = await sendRadar('ck', '208', () => {});
+    expect(res.success).toBe(false);
+    expect(probes).toHaveLength(4);
+    const ids = new Set(probes.map((p) => p.payload.deviceId));
+    expect(ids.size).toBe(1);
+  });
+});
+
+describe('e2e: network degradation (desktop-parity fallbacks)', () => {
+  test('gateway 502: latest rollcall degrades to null (desktop try/except)', async () => {
+    sc = freshScenario();
+    sc.gatewayDown = true;
+    sc.rollcallsByCourse[1] = [{ id: 301, rollcall_type: 'number', status: 'active' }];
+    const outcome = await fetchRollcallOutcome(1, 'ck', 2025001);
+    expect(outcome).toBeNull();
+    expect(probes).toHaveLength(0);
+    const res = await sendRadar('ck', '301', () => {});
+    expect(res.success).toBe(false);
+  });
+
+  test('gateway 502: courses query surfaces error to screen for retry', async () => {
+    sc = freshScenario();
+    sc.gatewayDown = true;
+    await expect(getCourses('ck', '31', '13')).rejects.toThrow();
+    const sem = await getSemesterInfo('ck');
+    expect(sem).toEqual({ semester_id: '29', academic_year_id: '12' });
+  });
+
+  test('gateway 502: number submission returns no_code, no crash', async () => {
+    sc = freshScenario();
+    sc.gatewayDown = true;
+    const res = await submitNumberCode('ck', '310', () => {});
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('no_code');
+  });
+});
+
+describe('e2e: desktop-parity field aliases and time', () => {
+  test('kind field recognized as radar alias', async () => {
+    sc = freshScenario();
+    sc.rollcallsByCourse[1] = [{ id: 401, kind: 'Radar', status: 'active' }];
+    sc.radarActive = [{ rollcall_id: 401, kind: 'radar' }];
+    const outcome = await fetchRollcallOutcome(1, 'ck', 2025001);
+    expect(outcome?.type).toBe('radar_active');
+  });
+
+  test('time formatted as fixed UTC+8 regardless of device timezone', async () => {
+    expect(fmtTime('2026-09-09T02:05:00Z')).toBe('2026-09-09 10:05');
+    expect(fmtTime('2026-01-01T16:30:00Z')).toBe('2026-01-02 00:30');
+    expect(fmtTime(undefined)).toBe('未知');
+    expect(fmtTime('garbage')).toBe('garbage');
   });
 });

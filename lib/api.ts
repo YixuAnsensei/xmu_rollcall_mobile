@@ -27,6 +27,7 @@ export interface RollcallRecord {
   isRadar?: boolean;
   rollcall_type?: string;
   type?: string;
+  kind?: string;
   is_number?: boolean;
   is_qrcode?: boolean;
   is_qr?: boolean;
@@ -51,6 +52,12 @@ function makeHeaders(cookie: string): Record<string, string> {
   return { ...HEADERS_BASE, cookie, 'content-type': 'application/json' };
 }
 
+function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
 function parseListResponse(data: any, key: string): any[] {
   if (Array.isArray(data)) return data;
   return (data[key] || data.data || []) as any[];
@@ -61,13 +68,9 @@ export function fmtTime(value?: string): string {
   try {
     const dt = new Date(value.replace('Z', '+00:00'));
     if (isNaN(dt.getTime())) return String(value);
-    return dt.toLocaleString('zh-CN', {
-      hour12: false,
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const cn = new Date(dt.getTime() + 8 * 60 * 60 * 1000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${cn.getUTCFullYear()}-${pad(cn.getUTCMonth() + 1)}-${pad(cn.getUTCDate())} ${pad(cn.getUTCHours())}:${pad(cn.getUTCMinutes())}`;
   } catch {
     return String(value);
   }
@@ -89,9 +92,11 @@ function uuid(): string {
 
 export async function getProfile(cookie: string): Promise<{ id: number; name: string }> {
   try {
-    const resp = await fetch(`${BASE_URL}/api/profile`, {
-      headers: makeHeaders(cookie),
-    });
+    const resp = await fetchWithTimeout(
+      `${BASE_URL}/api/profile`,
+      { headers: makeHeaders(cookie) },
+      10000
+    );
     if (resp.ok) {
       const data = await resp.json();
       const id =
@@ -114,9 +119,11 @@ export async function getProfile(cookie: string): Promise<{ id: number; name: st
 
 export async function getSemesterInfo(cookie: string): Promise<SemesterInfo> {
   try {
-    const resp = await fetch(`${BASE_URL}/api/current-semester-info`, {
-      headers: makeHeaders(cookie),
-    });
+    const resp = await fetchWithTimeout(
+      `${BASE_URL}/api/current-semester-info`,
+      { headers: makeHeaders(cookie) },
+      5000
+    );
     if (resp.ok) {
       const data = await resp.json();
       return {
@@ -147,14 +154,18 @@ export async function getCourses(
     showScorePassedStatus: false,
   };
 
-  const resp = await fetch(`${BASE_URL}/api/my-courses`, {
-    method: 'POST',
-    headers: {
-      ...makeHeaders(cookie),
-      referer: `${BASE_URL}/user/index`,
+  const resp = await fetchWithTimeout(
+    `${BASE_URL}/api/my-courses`,
+    {
+      method: 'POST',
+      headers: {
+        ...makeHeaders(cookie),
+        referer: `${BASE_URL}/user/index`,
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
+    15000
+  );
 
   const data = await resp.json();
   const list = parseListResponse(data, 'courses') as Course[];
@@ -176,29 +187,39 @@ export async function getLatestRollcall(
   cookie: string,
   studentId: number
 ): Promise<RollcallRecord | null> {
-  const resp = await fetch(
-    `${BASE_URL}/api/course/${courseId}/student/${studentId}/rollcalls?page=1&page_size=99`,
-    { headers: makeHeaders(cookie) }
-  );
-  const data = await resp.json();
-  const rollcalls = parseListResponse(data, 'rollcalls') as RollcallRecord[];
-  return rollcalls.length > 0 ? rollcalls[rollcalls.length - 1] : null;
+  try {
+    const resp = await fetchWithTimeout(
+      `${BASE_URL}/api/course/${courseId}/student/${studentId}/rollcalls?page=1&page_size=99`,
+      { headers: makeHeaders(cookie) },
+      15000
+    );
+    const data = await resp.json();
+    const rollcalls = parseListResponse(data, 'rollcalls') as RollcallRecord[];
+    return rollcalls.length > 0 ? rollcalls[rollcalls.length - 1] : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getNumberCode(
   rollcallId: string,
   cookie: string
 ): Promise<{ code: string | null; status: string | null; endTime: string | null }> {
-  const resp = await fetch(
-    `${BASE_URL}/api/rollcall/${rollcallId}/student_rollcalls`,
-    { headers: makeHeaders(cookie) }
-  );
-  const data = await resp.json();
-  return {
-    code: data.number_code ?? null,
-    status: data.status ?? null,
-    endTime: data.end_time ?? null,
-  };
+  try {
+    const resp = await fetchWithTimeout(
+      `${BASE_URL}/api/rollcall/${rollcallId}/student_rollcalls`,
+      { headers: makeHeaders(cookie) },
+      15000
+    );
+    const data = await resp.json();
+    return {
+      code: data.number_code ?? null,
+      status: data.status ?? null,
+      endTime: data.end_time ?? null,
+    };
+  } catch {
+    return { code: null, status: null, endTime: null };
+  }
 }
 
 export async function findActiveRadarRecord(
@@ -206,9 +227,11 @@ export async function findActiveRadarRecord(
   rollcallId: string
 ): Promise<any | null> {
   try {
-    const resp = await fetch(`${BASE_URL}/api/radar/rollcalls`, {
-      headers: makeHeaders(cookie),
-    });
+    const resp = await fetchWithTimeout(
+      `${BASE_URL}/api/radar/rollcalls`,
+      { headers: makeHeaders(cookie) },
+      15000
+    );
     const data = await resp.json();
     const rollcalls: any[] = Array.isArray(data)
       ? data
@@ -243,15 +266,16 @@ export async function submitNumberCode(
   }
 
   try {
-    const resp = await fetch(
+    const resp = await fetchWithTimeout(
       `${BASE_URL}/api/rollcall/${rollcallId}/answer_number_rollcall`,
       {
         method: 'PUT',
         headers: makeHeaders(cookie),
         body: JSON.stringify({ deviceId: uuid(), numberCode: String(code) }),
-      }
+      },
+      15000
     );
-    if (resp.ok) {
+    if (resp.status === 200) {
       onLog(`✅ 数字签到成功喵❤ 签到码：${code}`);
       return { ok: true, code: String(code) };
     }
@@ -376,11 +400,15 @@ async function realRadarPut(
     speed: null,
   };
   try {
-    const resp = await fetch(`${BASE_URL}/api/rollcall/${rollcallId}/answer`, {
-      method: 'PUT',
-      headers: makeHeaders(cookie),
-      body: JSON.stringify(payload),
-    });
+    const resp = await fetchWithTimeout(
+      `${BASE_URL}/api/rollcall/${rollcallId}/answer`,
+      {
+        method: 'PUT',
+        headers: makeHeaders(cookie),
+        body: JSON.stringify(payload),
+      },
+      15000
+    );
     let data: any = {};
     try { data = await resp.json(); } catch {}
     return [resp.status, data];
@@ -507,7 +535,7 @@ export function isRadarType(record: RollcallRecord): boolean {
   return (
     Boolean(record.is_radar) ||
     Boolean(record.isRadar) ||
-    ((record.rollcall_type || record.type || '').toLowerCase().includes('radar'))
+    ((record.rollcall_type || record.type || record.kind || '').toLowerCase().includes('radar'))
   );
 }
 
