@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0F0E17"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -33,6 +28,12 @@
         "projectId": "70635657-87da-4edb-a688-6720f5f40ede"
       }
     },
-    "owner": "yixuansensei"
+    "owner": "yixuansensei",
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-web-browser",
+      "expo-splash-screen"
+    ]
   }
 }
