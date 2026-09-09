@@ -315,10 +315,16 @@ function circleIntersections(
   }
   if (dist < Math.abs(d1 - d2)) {
     if (Math.abs(d1 - d2) - dist <= 50) {
-      const r = d1 > d2 ? d1 / dist : d2 / dist;
-      const fx = d1 > d2 ? x1 : x2;
-      const fy = d1 > d2 ? y1 : y2;
-      return [[fx, fy], [fx, fy]];
+      if (d1 > d2) {
+        const r = d1 / dist;
+        const px = x1 + (x2 - x1) * r;
+        const py = y1 + (y2 - y1) * r;
+        return [[px, py], [px, py]];
+      }
+      const r = d2 / dist;
+      const px = x2 + (x1 - x2) * r;
+      const py = y2 + (y1 - y2) * r;
+      return [[px, py], [px, py]];
     }
     return null;
   }
@@ -352,7 +358,7 @@ function solveTwoPoints(
   return sols.map(([x, y]) => xyToLatlon(x, y, lat0, lng0));
 }
 
-async function radarPut(
+async function realRadarPut(
   cookie: string,
   rollcallId: string,
   lat: number,
@@ -381,6 +387,30 @@ async function radarPut(
   } catch (e) {
     return [0, { error: String(e) }];
   }
+}
+
+type RadarPutFn = (
+  cookie: string,
+  rollcallId: string,
+  lat: number,
+  lng: number,
+  deviceId: string
+) => Promise<[number, any]>;
+
+let radarPutImpl: RadarPutFn = realRadarPut;
+
+async function radarPut(
+  cookie: string,
+  rollcallId: string,
+  lat: number,
+  lng: number,
+  deviceId: string
+): Promise<[number, any]> {
+  return radarPutImpl(cookie, rollcallId, lat, lng, deviceId);
+}
+
+export function __setRadarPutForTest(fn: RadarPutFn | null): void {
+  radarPutImpl = fn ?? realRadarPut;
 }
 
 export async function radarLockCampus(

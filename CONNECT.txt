@@ -1,5 +1,9 @@
 === Zako 签到助手 - 连接方式 ===
 
+v1.2.1 变更:
+- 深度审计桌面端对账: 修复雷达两圆"内切近似"分支几何公式与桌面端不一致的偏差（1.2.0 遗漏的边缘场景）
+- 新增离线回归测试 lib/__tests__/api.test.ts（bun test, 15 用例）: 四校区定位<50m、直中、无距离、超时、两圆不相交、状态机判定（雷达结束/二维码不误判雷达/无码兜底）、数字签到提交请求形态（GET取码→PUT answer_number_rollcall, body=deviceId+numberCode, finished/无码不提交）、时间解析
+
 v1.2.0 构建页: https://expo.dev/accounts/yixuansensei/projects/zako-rollcall-mobile/builds/3b0bc2a1-3f0f-4998-a6b9-2eaa1c3e92e6
 本地已下载: D:\claude-code-haha\xmu_rollcall_mobile\zako-rollcall-v1.2.0.apk（卸载旧版后传手机安装）
 v1.2.0 变更:
