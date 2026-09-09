@@ -6,8 +6,8 @@ dist/
 .DS_Store
 gradle-8.6-bin.zip
 
-android/
-ios/
+/android/
+/ios/
 *.orig
 qr_*.png
 !qr_connect.png
