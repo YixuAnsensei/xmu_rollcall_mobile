@@ -5,9 +5,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { isLoggedIn, getAuth } from '../../lib/auth';
 
@@ -58,11 +58,15 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           style={[styles.pawButton, loggedIn ? styles.pawLoggedIn : styles.pawLogin]}
-          onPress={() => router.push('/screens/LoginScreen')}
+          onPress={() =>
+            loggedIn
+              ? router.push('/screens/CoursesScreen')
+              : router.push('/screens/LoginScreen')
+          }
           activeOpacity={0.85}
         >
           <Text style={styles.pawIcon}>🐾</Text>
-          <Text style={styles.pawText}>{loggedIn ? '继续签到' : '登录账号'}</Text>
+          <Text style={styles.pawText}>{loggedIn ? '查看课程' : '登录账号'}</Text>
         </TouchableOpacity>
 
         {loggedIn && (

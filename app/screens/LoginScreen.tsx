@@ -5,9 +5,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  SafeAreaView,
-  Alert,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import XmuCookie from '../../modules/xmu-cookie/src/XmuCookieModule';
@@ -18,6 +17,7 @@ const BASE_URL = 'https://lnt.xmu.edu.cn';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [attempt, setAttempt] = useState(0);
   const [mode, setMode] = useState<'entry' | 'web'>('entry');
   const [status, setStatus] = useState('点击按钮打开学校 CAS 登录');
@@ -50,9 +50,7 @@ export default function LoginScreen() {
   const handleLoginSuccess = async (cookie: string) => {
     const profile = await getProfile(cookie);
     setAuth(cookie, profile.id, profile.name);
-    Alert.alert('登录成功喵❤', `欢迎，${profile.name || profile.id}！`, [
-      { text: '好的', onPress: () => router.replace('/screens/HomeScreen') },
-    ]);
+    router.replace('/screens/CoursesScreen');
   };
 
   const checkUrlAndCookie = async (url?: string) => {
@@ -80,25 +78,15 @@ export default function LoginScreen() {
 
   if (mode === 'web') {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.webHeader}>
+      <View style={styles.container}>
+        <View style={[styles.webHeader, { paddingTop: insets.top + 8 }]}>
+          {pageLoading && (
+            <ActivityIndicator size="small" color="#FF6B9D" style={styles.webSpinner} />
+          )}
           <Text style={styles.statusText} numberOfLines={1}>
             {status}
           </Text>
-          <View style={styles.headerBtns}>
-            <TouchableOpacity style={styles.headerBtn} onPress={resetSession}>
-              <Text style={styles.headerBtnText}>刷新</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.headerBtn} onPress={abortLogin}>
-              <Text style={styles.headerBtnText}>关闭</Text>
-            </TouchableOpacity>
-          </View>
         </View>
-        {pageLoading && (
-          <View style={styles.loadingBar}>
-            <ActivityIndicator size="small" color="#FF6B9D" />
-          </View>
-        )}
         <WebView
           key={attempt}
           source={{ uri: BASE_URL }}
@@ -129,7 +117,19 @@ export default function LoginScreen() {
           }}
           style={styles.webview}
         />
-      </SafeAreaView>
+        <View style={[styles.webFooter, { paddingBottom: insets.bottom + 10 }]}>
+          <TouchableOpacity style={styles.webActionBtn} onPress={resetSession} activeOpacity={0.8}>
+            <Text style={styles.webActionText}>🔄 刷新页面</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.webActionBtn, styles.webActionBtnClose]}
+            onPress={abortLogin}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.webActionText, styles.webActionTextClose]}>✖ 关闭登录</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     );
   }
 
@@ -241,38 +241,49 @@ const styles = StyleSheet.create({
   webHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
     backgroundColor: '#1A1828',
     borderBottomWidth: 1,
     borderBottomColor: '#221F33',
+  },
+  webSpinner: {
+    marginRight: 8,
   },
   statusText: {
     flex: 1,
     color: '#A7A9BE',
     fontSize: 12,
-    marginRight: 8,
   },
-  headerBtns: {
+  webFooter: {
     flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    backgroundColor: '#1A1828',
+    borderTopWidth: 1,
+    borderTopColor: '#221F33',
   },
-  headerBtn: {
+  webActionBtn: {
+    flex: 1,
     backgroundColor: '#FF6B9D',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    marginLeft: 8,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginRight: 10,
   },
-  headerBtnText: {
+  webActionBtnClose: {
+    backgroundColor: '#221F33',
+    borderWidth: 1,
+    borderColor: '#2E2C3F',
+    marginRight: 0,
+  },
+  webActionText: {
     color: '#0F0E17',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: 'bold',
   },
-  loadingBar: {
-    paddingVertical: 2,
-    alignItems: 'center',
-    backgroundColor: '#0F0E17',
+  webActionTextClose: {
+    color: '#A7A9BE',
   },
   webview: {
     flex: 1,
