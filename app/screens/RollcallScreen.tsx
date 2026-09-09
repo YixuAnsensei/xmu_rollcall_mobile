@@ -13,35 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getAuth } from '../../lib/auth';
 import {
-  getSemesterInfo,
-  getLatestRollcall,
-  getNumberCode,
+  fetchRollcallOutcome,
   submitNumberCode,
-  radarLockCampus,
-  radarTriangulate,
-  isRadarType,
-  fmtTime,
+  sendRadar,
   getProfile,
+  type RollcallOutcome,
 } from '../../lib/api';
 
-// ---------------------------------------------------------------------------
-// Result shape
-// ---------------------------------------------------------------------------
-
-type DigitalResult = {
-  type: 'digital';
-  code: string;
-  status: string | null;
-  time: string;
-  rid: string;
-};
-type RadarActiveResult = { type: 'radar_active'; time: string; rid: string };
-type RadarPastResult = { type: 'radar_past'; time: string };
-type OtherResult = { type: 'other'; time: string };
-type NoResult = { type: 'none' };
-type LoadingResult = { type: 'loading' };
-
-type ResultType = DigitalResult | RadarActiveResult | RadarPastResult | OtherResult | NoResult | LoadingResult;
+type ResultType = RollcallOutcome | { type: 'loading' };
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -68,32 +47,15 @@ export default function RollcallScreen() {
         return;
       }
       const resolvedStudentId = studentId || (await getProfile(cookie)).id;
-      const sem = await getSemesterInfo(cookie);
-      const latest = await getLatestRollcall(parseInt(courseId, 10), cookie, resolvedStudentId);
-
-      if (!latest) {
-        setResult({ type: 'none' });
-        return;
-      }
-
-      const rid = String(latest.id || latest.rollcall_id || '');
-      const time = fmtTime(latest.created_at || latest.rollcall_time);
-      const radar = isRadarType(latest);
-
-      if (radar) {
-        setResult({ type: 'radar_active', time, rid });
-        return;
-      }
-
-      const { code, status } = await getNumberCode(rid, cookie);
-      if (code) {
-        setResult({ type: 'digital', code, status, time, rid });
-      } else {
-        setResult({ type: 'other', time });
-      }
+      const outcome = await fetchRollcallOutcome(
+        parseInt(courseId, 10),
+        cookie,
+        resolvedStudentId
+      );
+      setResult(outcome ?? { type: 'none' });
     } catch (e) {
       Alert.alert('查询错误', String(e));
-      setResult({ type: 'loading' });
+      setResult({ type: 'none' });
     }
   };
 
@@ -138,24 +100,17 @@ export default function RollcallScreen() {
       const { cookie } = await getAuth();
       if (!cookie) return;
       const log = (msg: string) => console.log(msg);
-      const [center, hitDist] = await radarLockCampus(cookie, result.rid, log);
-      if (!center) {
-        Alert.alert('❌ 雷达签到失败', '无法锁定校区');
-        return;
-      }
-      Alert.alert('📍 锁定校区', center.name);
-      if (hitDist === 0) {
-        Alert.alert('✅ 雷达签到成功', `直接命中 ${center.name} 中心！`);
-        return;
-      }
-      const [ok, pos] = await radarTriangulate(cookie, result.rid, center, log);
-      if (ok && pos) {
+      const res = await sendRadar(cookie, result.rid, log);
+      if (res.success) {
         Alert.alert(
-          '✅ 雷达签到成功',
-          `位置 ≈ (${pos[0].toFixed(4)}, ${pos[1].toFixed(4)})`
+          '✅ 雷达签到成功喵❤',
+          res.position
+            ? `教师位置 ≈ (${res.position[0].toFixed(4)}, ${res.position[1].toFixed(4)})`
+            : '签到完成'
         );
+        fetchRollcall();
       } else {
-        Alert.alert('❌ 雷达签到失败', '精确定位未成功，请重试');
+        Alert.alert('❌ 雷达签到失败', '定位未成功，请重试喵~');
       }
     } catch (e) {
       Alert.alert('错误', String(e));

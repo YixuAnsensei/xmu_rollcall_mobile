@@ -1,5 +1,10 @@
 === Zako 签到助手 - 连接方式 ===
 
+v1.2.0 变更:
+- 雷达签到引擎对齐桌面端重写: 修复三边定位 XY 坐标未转回经纬度就提交的致命 bug（"计算距离出错"根源）; 新增活动雷达列表判定（/api/radar/rollcalls）,已结束的雷达签到正确显示"上一次是雷达签到"（"已结束不显示"根源）; 会话共享 deviceId; 无数字码时兜底判雷达
+- 导航分层: 登录成功→枢纽页(学生信息+进入课程按钮)→课程列表→签到页, 返回逐级后退; Android 返回键在枢纽页回到登录页
+- APP 图标换成 nekonn 猫图（含 Android 自适应图标）
+
 v1.1.1 构建页: https://expo.dev/accounts/yixuansensei/projects/zako-rollcall-mobile/builds/eb525a85-dbb1-4958-aa98-cc0208fa2908
 本地已下载: D:\claude-code-haha\xmu_rollcall_mobile\zako-rollcall-v1.1.1.apk（94MB, 直接传手机安装）
 v1.1.1（最新, 安全区/跳转修复版）变更:

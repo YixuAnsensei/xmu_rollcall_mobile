@@ -201,6 +201,30 @@ export async function getNumberCode(
   };
 }
 
+export async function findActiveRadarRecord(
+  cookie: string,
+  rollcallId: string
+): Promise<any | null> {
+  try {
+    const resp = await fetch(`${BASE_URL}/api/radar/rollcalls`, {
+      headers: makeHeaders(cookie),
+    });
+    const data = await resp.json();
+    const rollcalls: any[] = Array.isArray(data)
+      ? data
+      : (data?.rollcalls ?? []);
+    const target = String(rollcallId);
+    for (const rc of rollcalls) {
+      if (!rc || typeof rc !== 'object') continue;
+      const rid = String(rc.rollcall_id ?? rc.id ?? '');
+      if (rid === target) return rc;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function submitNumberCode(
   cookie: string,
   rollcallId: string,
@@ -308,17 +332,38 @@ function circleIntersections(
   return [[mx + ox, my + oy], [mx - ox, my - oy]];
 }
 
+function xyToLatlon(x: number, y: number, lat0: number, lng0: number): [number, number] {
+  const lat = lat0 + (y / EARTH_R) * (180 / Math.PI);
+  const lng = lng0 + (x / (EARTH_R * Math.cos((lat0 * Math.PI) / 180))) * (180 / Math.PI);
+  return [lat, lng];
+}
+
+function solveTwoPoints(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number,
+  d1: number, d2: number
+): [number, number][] | null {
+  const lat0 = (lat1 + lat2) / 2;
+  const lng0 = (lng1 + lng2) / 2;
+  const [x1, y1] = latlonToXY(lat1, lng1, lat0, lng0);
+  const [x2, y2] = latlonToXY(lat2, lng2, lat0, lng0);
+  const sols = circleIntersections(x1, y1, d1, x2, y2, d2);
+  if (!sols) return null;
+  return sols.map(([x, y]) => xyToLatlon(x, y, lat0, lng0));
+}
+
 async function radarPut(
   cookie: string,
   rollcallId: string,
   lat: number,
-  lng: number
+  lng: number,
+  deviceId: string
 ): Promise<[number, any]> {
   const payload = {
     accuracy: PROBE_ACCURACY,
     altitude: 0,
     altitudeAccuracy: null,
-    deviceId: uuid(),
+    deviceId,
     heading: null,
     latitude: lat,
     longitude: lng,
@@ -341,11 +386,12 @@ async function radarPut(
 export async function radarLockCampus(
   cookie: string,
   rollcallId: string,
+  deviceId: string,
   log: (msg: string) => void
 ): Promise<[Campus | null, number]> {
   let best: { campus: Campus; dist: number } | null = null;
   for (const c of CAMPUSES) {
-    const [status, data] = await radarPut(cookie, rollcallId, c.lat, c.lng);
+    const [status, data] = await radarPut(cookie, rollcallId, c.lat, c.lng, deviceId);
     if (status === 200) {
       log(`🎯 校区探针直接命中：${c.name}`);
       return [c, 0];
@@ -363,18 +409,19 @@ export async function radarTriangulate(
   cookie: string,
   rollcallId: string,
   center: Campus,
+  deviceId: string,
   log: (msg: string) => void
 ): Promise<[boolean, [number, number] | null]> {
   const { lat: lat0, lng: lng0 } = center;
   const dlat = 0.004;
   const dlng = 0.004;
 
-  let [s1, d1Data] = await radarPut(cookie, rollcallId, lat0 + dlat, lng0);
-  let dist1 = radarDistance(d1Data);
+  const [s1, d1Data] = await radarPut(cookie, rollcallId, lat0 + dlat, lng0, deviceId);
+  const dist1 = radarDistance(d1Data);
   if (s1 === 200) return [true, [lat0 + dlat, lng0]];
 
-  let [s2, d2Data] = await radarPut(cookie, rollcallId, lat0, lng0 + dlng);
-  let dist2 = radarDistance(d2Data);
+  const [s2, d2Data] = await radarPut(cookie, rollcallId, lat0, lng0 + dlng, deviceId);
+  const dist2 = radarDistance(d2Data);
   if (s2 === 200) return [true, [lat0, lng0 + dlng]];
 
   if (dist1 === null || dist2 === null) {
@@ -382,11 +429,7 @@ export async function radarTriangulate(
     return [false, null];
   }
 
-  const lat0c = (lat0 + dlat + lat0) / 2;
-  const lng0c = (lng0 + lng0 + dlng) / 2;
-  const [x1, y1] = latlonToXY(lat0 + dlat, lng0, lat0c, lng0c);
-  const [x2, y2] = latlonToXY(lat0, lng0 + dlng, lat0c, lng0c);
-  const sols = circleIntersections(x1, y1, dist1, x2, y2, dist2);
+  const sols = solveTwoPoints(lat0 + dlat, lng0, lat0, lng0 + dlng, dist1, dist2);
   if (!sols) {
     log('⚠️ 两圆不相交，定位失败');
     return [false, null];
@@ -394,7 +437,7 @@ export async function radarTriangulate(
 
   for (const [plat, plng] of sols) {
     log(`🧮 候选教师坐标 (${plat.toFixed(6)}, ${plng.toFixed(6)})`);
-    const [s3] = await radarPut(cookie, rollcallId, plat, plng);
+    const [s3] = await radarPut(cookie, rollcallId, plat, plng, deviceId);
     if (s3 === 200) return [true, [plat, plng]];
   }
   return [false, null];
@@ -406,7 +449,8 @@ export async function sendRadar(
   log: (msg: string) => void
 ): Promise<RadarResult> {
   log(`🛰 开始雷达签到 rollcall_id=${rollcallId}`);
-  const [center, hitDist] = await radarLockCampus(cookie, rollcallId, log);
+  const deviceId = uuid();
+  const [center, hitDist] = await radarLockCampus(cookie, rollcallId, deviceId, log);
   if (!center) {
     log('❌ 四校区探针均未回传距离，雷达签到失败');
     return { success: false };
@@ -416,7 +460,7 @@ export async function sendRadar(
     return { success: true, campus: center.name, position: [center.lat, center.lng] };
   }
   log(`📍 锁定校区：${center.name}`);
-  const [ok, pos] = await radarTriangulate(cookie, rollcallId, center, log);
+  const [ok, pos] = await radarTriangulate(cookie, rollcallId, center, deviceId, log);
   if (ok && pos) {
     log(`✅ 雷达签到成功，教师位置≈(${pos[0].toFixed(6)}, ${pos[1].toFixed(6)})`);
   } else {
@@ -435,4 +479,51 @@ export function isRadarType(record: RollcallRecord): boolean {
     Boolean(record.isRadar) ||
     ((record.rollcall_type || record.type || '').toLowerCase().includes('radar'))
   );
+}
+
+// ---------------------------------------------------------------------------
+// Unified rollcall state machine (parity with desktop _show_code fetch())
+// ---------------------------------------------------------------------------
+
+export type RollcallOutcome =
+  | { type: 'none' }
+  | { type: 'radar_active'; rid: string; time: string }
+  | { type: 'radar_past'; time: string }
+  | { type: 'digital'; code: string; status: string | null; time: string; rid: string }
+  | { type: 'other'; time: string };
+
+export async function fetchRollcallOutcome(
+  courseId: number,
+  cookie: string,
+  studentId: number
+): Promise<RollcallOutcome | null> {
+  const latest = await getLatestRollcall(courseId, cookie, studentId);
+  if (!latest) return null;
+  const rid = String(latest.id ?? latest.rollcall_id ?? '');
+  const time = fmtTime(latest.rollcall_time || latest.created_at);
+  const radar = isRadarType(latest);
+  if (radar) {
+    const active = await findActiveRadarRecord(cookie, rid);
+    if (active !== null || String(latest.status ?? '') === 'active') {
+      return { type: 'radar_active', rid, time };
+    }
+    return { type: 'radar_past', time };
+  }
+  const { code, status } = await getNumberCode(rid, cookie);
+  if (code) {
+    return { type: 'digital', code, status, time, rid };
+  }
+  const active = await findActiveRadarRecord(cookie, rid);
+  if (
+    active !== null &&
+    (
+      active.is_radar ||
+      active.isRadar ||
+      String(active.rollcall_type ?? active.type ?? '').toLowerCase().includes('radar') ||
+      (!active.is_number && !active.is_qrcode && !active.is_qr)
+    )
+  ) {
+    return { type: 'radar_active', rid, time };
+  }
+  return { type: 'other', time };
 }

@@ -50,7 +50,7 @@ export default function LoginScreen() {
   const handleLoginSuccess = async (cookie: string) => {
     const profile = await getProfile(cookie);
     setAuth(cookie, profile.id, profile.name);
-    router.replace('/screens/CoursesScreen');
+    router.replace('/screens/HomeScreen');
   };
 
   const checkUrlAndCookie = async (url?: string) => {

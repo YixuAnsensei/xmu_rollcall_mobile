@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StatusBar,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -24,6 +25,17 @@ export default function HomeScreen() {
     setAuthState(getAuth());
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isLoggedIn()) {
+        router.push('/screens/LoginScreen');
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [router]);
 
   if (loading) {
     return (
