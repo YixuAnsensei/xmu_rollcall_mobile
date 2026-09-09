@@ -1,4 +1,4 @@
-package expo.modules
+package expo.modules.xmucookie
 
 import android.webkit.CookieManager
 import expo.modules.kotlin.modules.Module

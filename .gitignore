@@ -8,6 +8,8 @@ gradle-8.6-bin.zip
 
 /android/
 /ios/
+modules/*/android/build/
+modules/*/android/.cxx/
 *.orig
 qr_*.png
 !qr_connect.png

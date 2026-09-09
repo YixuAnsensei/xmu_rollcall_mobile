@@ -1,6 +1,6 @@
 {
   "platforms": ["android"],
   "android": {
-    "modules": ["expo.modules.XmuCookieModule"]
+    "modules": ["expo.modules.xmucookie.XmuCookieModule"]
   }
 }
