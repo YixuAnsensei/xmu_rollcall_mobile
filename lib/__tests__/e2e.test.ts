@@ -405,6 +405,32 @@ describe('e2e: classroom scenario regressions (2026-09-10 field test)', () => {
     expect(res.reason).toBe('finished');
     expect(submissions).toHaveLength(0);
   });
+
+  test('already-signed student (no fresh code) still shows digital with signed flag', async () => {
+    sc = freshScenario();
+    sc.rollcallsByCourse[1] = [{ id: 504, rollcall_type: 'number', status: 'active' }];
+    sc.numberRollcalls['504'] = { number_code: null, status: 'active', signed: true };
+    const outcome = await fetchRollcallOutcome(1, 'ck', 2025001);
+    expect(outcome?.type).toBe('digital');
+    if (outcome?.type !== 'digital') return;
+    expect(outcome.signed).toBe(true);
+    expect(outcome.status).toBe('active');
+  });
+
+  test('server marks signed after submission, outcome reflects it on re-query', async () => {
+    sc = freshScenario();
+    sc.rollcallsByCourse[1] = [{ id: 505, rollcall_type: 'number', status: 'active' }];
+    sc.numberRollcalls['505'] = { number_code: '8899', status: 'active' };
+    const outcome = await fetchRollcallOutcome(1, 'ck', 2025001);
+    if (outcome?.type !== 'digital') throw new Error('expected digital');
+    expect(outcome.signed).toBe(false);
+    const res = await submitNumberCode('ck', '505', () => {});
+    expect(res.ok).toBe(true);
+    sc.numberRollcalls['505'] = { number_code: null, status: 'active', signed: true };
+    const requery = await fetchRollcallOutcome(1, 'ck', 2025001);
+    if (requery?.type !== 'digital') throw new Error('expected digital');
+    expect(requery.signed).toBe(true);
+  });
 });
 
 describe('cookie session heuristic', () => {

@@ -204,7 +204,12 @@ export async function getLatestRollcall(
 export async function getNumberCode(
   rollcallId: string,
   cookie: string
-): Promise<{ code: string | null; status: string | null; endTime: string | null }> {
+): Promise<{
+  code: string | null;
+  status: string | null;
+  endTime: string | null;
+  signed: boolean;
+}> {
   try {
     const resp = await fetchWithTimeout(
       `${BASE_URL}/api/rollcall/${rollcallId}/student_rollcalls`,
@@ -212,13 +217,23 @@ export async function getNumberCode(
       15000
     );
     const data = await resp.json();
+    const signed = Boolean(
+      data.signed ??
+        data.is_signed ??
+        data.isSigned ??
+        data.answered ??
+        data.is_answered ??
+        data.isAnswered ??
+        (data.result !== undefined && data.result !== null && data.result !== '')
+    );
     return {
       code: data.number_code ?? null,
       status: data.status ?? null,
       endTime: data.end_time ?? null,
+      signed,
     };
   } catch {
-    return { code: null, status: null, endTime: null };
+    return { code: null, status: null, endTime: null, signed: false };
   }
 }
 
@@ -547,7 +562,7 @@ export type RollcallOutcome =
   | { type: 'none' }
   | { type: 'radar_active'; rid: string; time: string }
   | { type: 'radar_past'; time: string }
-  | { type: 'digital'; code: string; status: string | null; endTime: string | null; time: string; rid: string }
+  | { type: 'digital'; code: string; status: string | null; endTime: string | null; signed: boolean; time: string; rid: string }
   | { type: 'other'; time: string };
 
 export async function fetchRollcallOutcome(
@@ -567,10 +582,18 @@ export async function fetchRollcallOutcome(
     }
     return { type: 'radar_past', time };
   }
-  const { code, status, endTime } = await getNumberCode(rid, cookie);
-  if (code) {
+  const { code, status, endTime, signed } = await getNumberCode(rid, cookie);
+  if (code || signed) {
     const evidence = status ?? latest.status ?? null;
-    return { type: 'digital', code, status: evidence, endTime, time, rid };
+    return {
+      type: 'digital',
+      code: code ?? '',
+      status: evidence,
+      endTime,
+      signed,
+      time,
+      rid,
+    };
   }
   const active = await findActiveRadarRecord(cookie, rid);
   if (

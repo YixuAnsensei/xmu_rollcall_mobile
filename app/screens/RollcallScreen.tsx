@@ -77,7 +77,8 @@ export default function RollcallScreen() {
       const log = (msg: string) => console.log(msg);
       const res = await submitNumberCode(cookie, result.rid, log);
       if (res.ok) {
-        Alert.alert('✅ 签到成功', `签到码：${res.code}`);
+        Alert.alert('✅ 签到成功喵❤', `签到码：${res.code}`);
+        fetchRollcall();
       } else {
         const reason = res.reason;
         const msg =
@@ -189,9 +190,12 @@ function renderResult(
 
     case 'digital': {
       const isFinished = result.status === 'finished';
+      const isSigned = result.signed;
       const badge = isFinished
         ? { text: '🔒 已结束', color: '#A7A9BE' }
-        : { text: '✅ 进行中', color: '#06D6A0' };
+        : isSigned
+        ? { text: '🎉 已签到', color: '#06D6A0' }
+        : { text: '✅ 进行中', color: '#FFD166' };
       return (
         <View style={styles.card}>
           <Text style={styles.emoji}>🐾</Text>
@@ -206,7 +210,7 @@ function renderResult(
           {result.endTime && (
             <Text style={styles.timeText}>截止时间：{fmtTime(result.endTime)}</Text>
           )}
-          {!isFinished && (
+          {!isFinished && !isSigned && (
             <TouchableOpacity
               style={[styles.actionBtn, submitting && styles.actionBtnDisabled]}
               onPress={onSubmit}
@@ -219,6 +223,9 @@ function renderResult(
                 <Text style={styles.actionText}>🐾 一键数字签到</Text>
               )}
             </TouchableOpacity>
+          )}
+          {isSigned && (
+            <Text style={styles.finishedText}>本次签到已完成，无需重复提交喵~</Text>
           )}
           {isFinished && (
             <Text style={styles.finishedText}>签到已结束，无需提交喵~</Text>
