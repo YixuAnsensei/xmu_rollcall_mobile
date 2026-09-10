@@ -7,6 +7,7 @@ import {
   sendRadar,
   fmtTime,
 } from '../api';
+import { looksLikeSessionCookie } from '../auth';
 
 const EARTH_R = 6371000.0;
 
@@ -365,5 +366,54 @@ describe('e2e: desktop-parity field aliases and time', () => {
     expect(fmtTime('2026-01-01T16:30:00Z')).toBe('2026-01-02 00:30');
     expect(fmtTime(undefined)).toBe('未知');
     expect(fmtTime('garbage')).toBe('garbage');
+  });
+});
+
+describe('e2e: classroom scenario regressions (2026-09-10 field test)', () => {
+  test('student_rollcalls omits status -> falls back to record status, NOT finished', async () => {
+    sc = freshScenario();
+    sc.rollcallsByCourse[1] = [{ id: 501, rollcall_type: 'number', status: 'active' }];
+    sc.numberRollcalls['501'] = { number_code: '7744', end_time: '2026-09-10T01:50:00Z' };
+    const outcome = await fetchRollcallOutcome(1, 'ck', 2025001);
+    expect(outcome?.type).toBe('digital');
+    if (outcome?.type !== 'digital') return;
+    expect(outcome.status).toBe('active');
+    expect(outcome.endTime).toBe('2026-09-10T01:50:00Z');
+    const res = await submitNumberCode('ck', '501', () => {});
+    expect(res.ok).toBe(true);
+    expect(submissions).toHaveLength(1);
+  });
+
+  test('record and student_rollcalls both omit status -> badge evidence is null, never finished', async () => {
+    sc = freshScenario();
+    sc.rollcallsByCourse[1] = [{ id: 502, rollcall_type: 'number' }];
+    sc.numberRollcalls['502'] = { number_code: '3355' };
+    const outcome = await fetchRollcallOutcome(1, 'ck', 2025001);
+    expect(outcome?.type).toBe('digital');
+    if (outcome?.type !== 'digital') return;
+    expect(outcome.status).toBeNull();
+    const res = await submitNumberCode('ck', '502', () => {});
+    expect(res.ok).toBe(true);
+  });
+
+  test('explicit finished still short-circuits', async () => {
+    sc = freshScenario();
+    sc.rollcallsByCourse[1] = [{ id: 503, rollcall_type: 'number' }];
+    sc.numberRollcalls['503'] = { number_code: '1100', status: 'finished' };
+    const res = await submitNumberCode('ck', '503', () => {});
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('finished');
+    expect(submissions).toHaveLength(0);
+  });
+});
+
+describe('cookie session heuristic', () => {
+  test('csrf-only cookie is NOT a session (field-test false positive)', () => {
+    expect(looksLikeSessionCookie('csrftoken=AbCdEf123; HWWAFSESID=xyz')).toBe(false);
+  });
+  test('real session cookies are recognized', () => {
+    expect(looksLikeSessionCookie('sessionid=abc123; csrftoken=x')).toBe(true);
+    expect(looksLikeSessionCookie('tronclass_session=zzz')).toBe(true);
+    expect(looksLikeSessionCookie('')).toBe(false);
   });
 });

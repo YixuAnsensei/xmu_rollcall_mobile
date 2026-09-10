@@ -547,7 +547,7 @@ export type RollcallOutcome =
   | { type: 'none' }
   | { type: 'radar_active'; rid: string; time: string }
   | { type: 'radar_past'; time: string }
-  | { type: 'digital'; code: string; status: string | null; time: string; rid: string }
+  | { type: 'digital'; code: string; status: string | null; endTime: string | null; time: string; rid: string }
   | { type: 'other'; time: string };
 
 export async function fetchRollcallOutcome(
@@ -567,9 +567,10 @@ export async function fetchRollcallOutcome(
     }
     return { type: 'radar_past', time };
   }
-  const { code, status } = await getNumberCode(rid, cookie);
+  const { code, status, endTime } = await getNumberCode(rid, cookie);
   if (code) {
-    return { type: 'digital', code, status, time, rid };
+    const evidence = status ?? latest.status ?? null;
+    return { type: 'digital', code, status: evidence, endTime, time, rid };
   }
   const active = await findActiveRadarRecord(cookie, rid);
   if (

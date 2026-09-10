@@ -2,6 +2,26 @@ let _cookie: string | null = null;
 let _studentId: number | null = null;
 let _userName: string = '';
 
+const SESSION_COOKIE_NAMES = [
+  'sessionid',
+  'session_id',
+  'tronclass_session',
+  'session',
+  'token',
+  'jwt',
+  'auth',
+];
+
+export function looksLikeSessionCookie(cookie: string): boolean {
+  if (!cookie) return false;
+  const hasSessionName = SESSION_COOKIE_NAMES.some((name) =>
+    cookie
+      .split(';')
+      .some((pair) => pair.trim().toLowerCase().startsWith(name + '='))
+  );
+  return hasSessionName;
+}
+
 export interface AuthState {
   cookie: string | null;
   studentId: number | null;

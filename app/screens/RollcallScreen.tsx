@@ -17,6 +17,7 @@ import {
   submitNumberCode,
   sendRadar,
   getProfile,
+  fmtTime,
   type RollcallOutcome,
 } from '../../lib/api';
 
@@ -33,6 +34,7 @@ export default function RollcallScreen() {
   const [result, setResult] = useState<ResultType>({ type: 'loading' });
   const [submitting, setSubmitting] = useState(false);
   const [radarRunning, setRadarRunning] = useState(false);
+  const [radarLog, setRadarLog] = useState<string[]>([]);
 
   useEffect(() => {
     fetchRollcall();
@@ -96,10 +98,14 @@ export default function RollcallScreen() {
   const handleRadarSign = async () => {
     if (result.type !== 'radar_active' || !result.rid || radarRunning) return;
     setRadarRunning(true);
+    setRadarLog([]);
     try {
       const { cookie } = await getAuth();
       if (!cookie) return;
-      const log = (msg: string) => console.log(msg);
+      const log = (msg: string) => {
+        console.log(msg);
+        setRadarLog((prev) => [...prev.slice(-30), msg]);
+      };
       const res = await sendRadar(cookie, result.rid, log);
       if (res.success) {
         Alert.alert(
@@ -139,6 +145,7 @@ export default function RollcallScreen() {
           onRadar: handleRadarSign,
           submitting,
           radarRunning,
+          radarLog,
         })}
       </View>
 
@@ -157,9 +164,10 @@ function renderResult(
     onRadar: () => void;
     submitting: boolean;
     radarRunning: boolean;
+    radarLog: string[];
   }
 ) {
-  const { onCopy, onSubmit, onRadar, submitting, radarRunning } = actions;
+  const { onCopy, onSubmit, onRadar, submitting, radarRunning, radarLog } = actions;
 
   switch (result.type) {
     case 'loading':
@@ -179,7 +187,11 @@ function renderResult(
         </View>
       );
 
-    case 'digital':
+    case 'digital': {
+      const isFinished = result.status === 'finished';
+      const badge = isFinished
+        ? { text: '🔒 已结束', color: '#A7A9BE' }
+        : { text: '✅ 进行中', color: '#06D6A0' };
       return (
         <View style={styles.card}>
           <Text style={styles.emoji}>🐾</Text>
@@ -188,12 +200,13 @@ function renderResult(
             <Text style={styles.codeText}>{result.code}</Text>
           </TouchableOpacity>
           <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>
-              {result.status === 'active' ? '✅ 进行中' : '🔒 已结束'}
-            </Text>
+            <Text style={[styles.statusText, { color: badge.color }]}>{badge.text}</Text>
           </View>
-          <Text style={styles.timeText}>签到时间：{result.time}</Text>
-          {result.status === 'active' && (
+          <Text style={styles.timeText}>发起时间：{result.time}</Text>
+          {result.endTime && (
+            <Text style={styles.timeText}>截止时间：{fmtTime(result.endTime)}</Text>
+          )}
+          {!isFinished && (
             <TouchableOpacity
               style={[styles.actionBtn, submitting && styles.actionBtnDisabled]}
               onPress={onSubmit}
@@ -207,11 +220,12 @@ function renderResult(
               )}
             </TouchableOpacity>
           )}
-          {result.status === 'finished' && (
+          {isFinished && (
             <Text style={styles.finishedText}>签到已结束，无需提交喵~</Text>
           )}
         </View>
       );
+    }
 
     case 'radar_active':
       return (
@@ -232,6 +246,15 @@ function renderResult(
               <Text style={styles.actionText}>🛰 一键雷达签到</Text>
             )}
           </TouchableOpacity>
+          {radarLog.length > 0 && (
+            <View style={styles.radarLogBox}>
+              {radarLog.map((line, i) => (
+                <Text key={i} style={styles.radarLogLine}>
+                  {line}
+                </Text>
+              ))}
+            </View>
+          )}
         </View>
       );
 
@@ -393,5 +416,20 @@ const styles = StyleSheet.create({
   refreshText: {
     color: '#A7A9BE',
     fontSize: 14,
+  },
+  radarLogBox: {
+    marginTop: 12,
+    width: '100%',
+    backgroundColor: '#0A0912',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    maxHeight: 180,
+  },
+  radarLogLine: {
+    color: '#A7A9BE',
+    fontSize: 11,
+    fontFamily: 'monospace',
+    lineHeight: 16,
   },
 });

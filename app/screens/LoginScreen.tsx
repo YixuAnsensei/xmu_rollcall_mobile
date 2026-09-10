@@ -10,7 +10,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import XmuCookie from '../../modules/xmu-cookie/src/XmuCookieModule';
-import { setAuth } from '../../lib/auth';
+import { setAuth, looksLikeSessionCookie } from '../../lib/auth';
 import { getProfile } from '../../lib/api';
 
 const BASE_URL = 'https://lnt.xmu.edu.cn';
@@ -20,7 +20,7 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const [attempt, setAttempt] = useState(0);
   const [mode, setMode] = useState<'entry' | 'web'>('entry');
-  const [status, setStatus] = useState('点击按钮打开学校 CAS 登录');
+  const [status, setStatus] = useState('🐾 请进行登录，登录后将自动获取 Cookie 喵~');
   const [pageLoading, setPageLoading] = useState(false);
   const handlingRef = React.useRef(false);
 
@@ -58,20 +58,17 @@ export default function LoginScreen() {
     if (url.includes('lnt.xmu.edu.cn') && !url.includes('ids.xmu.edu.cn')) {
       const cookie =
         (await XmuCookie.getCookieForUrlAsync('https://lnt.xmu.edu.cn')) ?? '';
-      if (
-        cookie.includes('session') ||
-        cookie.includes('SESSION') ||
-        cookie.includes('token') ||
-        cookie.includes('tronclass')
-      ) {
+      if (looksLikeSessionCookie(cookie)) {
         handlingRef.current = true;
         setStatus('✅ 登录成功喵❤ 正在验证身份…');
         try {
           await handleLoginSuccess(cookie);
         } catch {
           handlingRef.current = false;
-          setStatus('❌ Cookie 验证失败，请点击刷新或关闭重试喵');
+          setStatus('🐾 请完成登录，会自动获取 Cookie 喵~（若刚登录请点刷新）');
         }
+      } else {
+        setStatus('🐾 请进行登录，登录后将自动获取 Cookie 喵~');
       }
     }
   };
@@ -112,7 +109,7 @@ export default function LoginScreen() {
           onError={() => {
             setPageLoading(false);
             if (!handlingRef.current) {
-              setStatus('❌ 页面加载失败，请点击刷新重试喵');
+              setStatus('🐾 页面加载异常，请点刷新重试喵~');
             }
           }}
           style={styles.webview}
